@@ -65,7 +65,7 @@ class ParkingPlannerNode2(Node):
         self.max_steering = 7.0 # 하드웨어 최대 조향각
 
         # 접근 시간 (튜닝 필요)
-        self.approach_duration_map = {1: 10.5, 2: 14.5, 3: 18.5, 4: 22.5}
+        self.approach_duration_map = {1: 10.0, 2: 14.0, 3: 18.0, 4: 22.0}
         self.approach_speed = 50.0
 
         self.state = ParkingState.READY
@@ -245,9 +245,9 @@ class ParkingPlannerNode2(Node):
 
         # [Dual Smoothing]
         # 위치(Lat): alpha 0.4 (민감)
-        # 각도(Ang): alpha 0.1 (둔감 - Jitter 무시)
+        # 각도(Ang): alpha 0.3 (둔감 - Jitter 무시)
         lat_alpha = 0.4
-        head_alpha = 0.1
+        head_alpha = 0.3
         
         if self.smooth_lat_error == 0.0: self.smooth_lat_error = raw_lat_error
         else: self.smooth_lat_error = (lat_alpha * raw_lat_error) + ((1-lat_alpha)*self.smooth_lat_error)
@@ -256,24 +256,33 @@ class ParkingPlannerNode2(Node):
         else: self.smooth_heading_error = (head_alpha * raw_heading_error) + ((1-head_alpha)*self.smooth_heading_error)
 
         # 종료 조건
-        if dist_y < 20:
+        if dist_y <15 and abs(self.smooth_heading_error) < 3.0:
+            self.state = ParkingState.FINISHED
+            return
+        elif dist_y < 8: # 안전장치: 너무 깊으면 각도 안 맞아도 일단 정지
             self.state = ParkingState.FINISHED
             return
 
-        # PID 제어 (Deadband 없음)
-        Kp_lat = 0.15
-        Kp_ang = 0.4
-        
-        # 위치가 많이 틀어졌으면 각도 무시하고 위치부터
-        if abs(self.smooth_lat_error) > 50: Kp_ang = 0.1
+        # 거의 다 들어왔거나(25px), 오차가 매우 작으면 핸들을 정렬(0)해버림
+        if dist_y < 25: 
+            raw_steer = 0.0
+        elif abs(self.smooth_lat_error) < 5.0 and abs(self.smooth_heading_error) < 1.5:
+            raw_steer = 0.0
+        else:
+            # 4. PID 제어 (Gain 완화)
+            Kp_lat = 0.12 # 0.15 -> 0.12
+            Kp_ang = 0.45 # 0.6 -> 0.45 (과잉 회전 방지)
+            
+            if abs(self.smooth_lat_error) > 50:
+                Kp_ang = 0.15
 
-        raw_steer = -((Kp_lat * self.smooth_lat_error) + (Kp_ang * self.smooth_heading_error))
+            # 조향 계산 (부호 - 유지)
+            raw_steer = -((Kp_lat * self.smooth_lat_error) + (Kp_ang * self.smooth_heading_error))
         steer = np.clip(raw_steer, -self.max_steering, self.max_steering)
         
-        # 속도 고정 (정확성 위함)
         speed = -40.0
         
-        self.publish_control(steer, speed, alpha=0.2)
+        self.publish_control(steer, speed, alpha=0.1)
         self.get_logger().info(f"Aligning: X_err={self.smooth_lat_error:.1f}, Ang_err={self.smooth_heading_error:.1f} -> Steer={steer:.1f}")
 
     def run_finished(self):
