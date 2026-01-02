@@ -24,6 +24,9 @@ setup(
             'yolov8_node = camera_perception_pkg.yolov8_node:main',
             'traffic_light_detector_node = camera_perception_pkg.traffic_light_detector_node:main',
             'lane_info_extractor_node = camera_perception_pkg.lane_info_extractor_node:main',
+            'parking_spot_extractor_node = camera_perception_pkg.parking_spot_extractor_node:main',
+            'surroundview_node = camera_perception_pkg.surroundview_node:main',
+            'surroundview_maker = camera_perception_pkg.surroundview_maker:main',
         ],
     },
 )

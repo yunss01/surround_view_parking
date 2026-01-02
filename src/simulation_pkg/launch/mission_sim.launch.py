@@ -36,47 +36,64 @@ def generate_launch_description():
             executable='load_ego_car_node',
             output='screen',
         ),
-        
+
         Node(
-            package='simulation_pkg',
-            executable='load_obstable_car_node',
+            package='camera_perception_pkg',
+            executable='surroundview_node',
             output='screen',
         ),
 
-        Node(
-            package='simulation_pkg',
-            executable='load_traffic_light_node',
-            output='screen',
-        ),
+        # Node(
+        #     package='camera_perception_pkg',
+        #     executable='surroundview_maker',
+        #     output='screen',
+        # ),
         
-        # 
+        # Node(
+        #     package='simulation_pkg',
+        #     executable='load_obstable_car_node',
+        #     output='screen',
+        # ),
+
+        # Node(
+        #     package='simulation_pkg',
+        #     executable='load_traffic_light_node',
+        #     output='screen',
+        # ),
+
         Node(
             package='camera_perception_pkg', 
             executable='yolov8_node',
-            output='screen'
+            output='screen',
         ),
         
         Node(
             package='debug_pkg',
             executable='yolov8_visualizer_node',
-            output='screen'
-        ),   
+            output='screen',
+        ), 
 
         Node(
-            package='debug_pkg',
-            executable='path_visualizer_node',
-            output='screen'
-        ),
-        
-        Node(
             package='camera_perception_pkg', 
-            executable='lane_info_extractor_node',
-            output='screen'
+            executable='parking_spot_extractor_node',
+            output='screen',
         ),
+
+        # Node(
+        #     package='debug_pkg',
+        #     executable='path_visualizer_node',
+        #     output='screen'
+        # ),
+
+        # Node(
+        #     package='debug_pkg',
+        #     executable='image_saver_node',
+        #     output='screen'
+        # ),
 
         Node(
             package='decision_making_pkg', 
-            executable='path_planner_node',
+            executable='sim_parking_planner_node_2',
             output='screen'
         ),
        
@@ -91,5 +108,13 @@ def generate_launch_description():
             executable='sim_simulation_sender_node',
             output='screen'
         ),
+
+        # [추가] Gazebo에 직접 경로를 그리는 최종 노드
+        # Node(
+        #     package='debug_pkg',
+        #     executable='path_drawer_node',
+        #     name='path_drawer_node',
+        #     output='screen'
+        # ),
 
     ])      

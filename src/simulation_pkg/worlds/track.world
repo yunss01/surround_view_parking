@@ -15,7 +15,6 @@
     <background>0.7 0.7 0.7 1</background>
     <shadows>0</shadows>
   </scene>
-
   
   <model name='top_camera'> <!-- 모델의 이름 -->
       <link name='top_camera_link'> <!-- 링크 정의 -->
@@ -195,10 +194,9 @@
         </visual>
       </link>
     </model>
-
+    
     <include>
       <uri>model://sun</uri>
     </include>
-    
   </world>
 </sdf>

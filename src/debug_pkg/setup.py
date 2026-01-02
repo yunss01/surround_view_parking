@@ -22,7 +22,9 @@ setup(
         'console_scripts': [
             'path_visualizer_node = debug_pkg.path_visualizer_node:main',	
             'yolov8_visualizer_node = debug_pkg.yolov8_visualizer_node:main',	
-            'image_saver_node = debug_pkg.image_saver_node:main',	
+            'image_saver_node = debug_pkg.image_saver_node:main',
+            'interactive_tuner = debug_pkg.interactive_tuner:main',
+            'path_drawer_node = debug_pkg.path_drawer_node:main',	
         ],
     },
 )

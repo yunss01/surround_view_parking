@@ -1,37 +1,24 @@
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import QoSProfile
-from rclpy.qos import QoSHistoryPolicy
-from rclpy.qos import QoSDurabilityPolicy
-from rclpy.qos import QoSReliabilityPolicy
-
-from std_msgs.msg import String, Bool
-from interfaces_pkg.msg import PathPlanningResult, DetectionArray, MotionCommand
-from .lib import decision_making_func_lib as DMFL
+from rclpy.qos import QoSProfile, QoSHistoryPolicy, QoSDurabilityPolicy, QoSReliabilityPolicy
+from interfaces_pkg.msg import PathPlanningResult, MotionCommand
+import time
 
 #---------------Variable Setting---------------
-SUB_DETECTION_TOPIC_NAME = "detections"
-SUB_PATH_TOPIC_NAME = "path_planning_result"
-SUB_TRAFFIC_LIGHT_TOPIC_NAME = "yolov8_traffic_light_info"
-SUB_LIDAR_OBSTACLE_TOPIC_NAME = "lidar_obstacle_info"
+SUB_PARKING_PATH_TOPIC_NAME = "parking_path"
 PUB_TOPIC_NAME = "topic_control_signal"
 
-#----------------------------------------------
-
-# 모션 플랜 발행 주기 (초) - 소수점 필요 (int형은 반영되지 않음)
 TIMER = 0.1
+MAX_STEERING = 7.0 
+#----------------------------------------------
 
 class MotionPlanningNode(Node):
     def __init__(self):
         super().__init__('motion_planner_node')
 
-        # 토픽 이름 설정
-        self.sub_detection_topic = self.declare_parameter('sub_detection_topic', SUB_DETECTION_TOPIC_NAME).value
-        self.sub_path_topic = self.declare_parameter('sub_lane_topic', SUB_PATH_TOPIC_NAME).value
-        self.sub_traffic_light_topic = self.declare_parameter('sub_traffic_light_topic', SUB_TRAFFIC_LIGHT_TOPIC_NAME).value
-        self.sub_lidar_obstacle_topic = self.declare_parameter('sub_lidar_obstacle_topic', SUB_LIDAR_OBSTACLE_TOPIC_NAME).value
+        # 파라미터 설정
+        self.sub_parking_path_topic = self.declare_parameter('sub_parking_path_topic', SUB_PARKING_PATH_TOPIC_NAME).value
         self.pub_topic = self.declare_parameter('pub_topic', PUB_TOPIC_NAME).value
-        
         self.timer_period = self.declare_parameter('timer', TIMER).value
 
         # QoS 설정
@@ -42,92 +29,53 @@ class MotionPlanningNode(Node):
             depth=1
         )
 
-        # 변수 초기화
-        self.detection_data = None
-        self.path_data = None
-        self.traffic_light_data = None
-        self.lidar_data = None
-
+        # 데이터 변수
+        self.parking_path_data = None
+        self.last_parking_cmd_time = 0.0
+        
+        # 명령값 저장 변수
         self.steering_command = 0
-        self.left_speed_command = 0
-        self.right_speed_command = 0
-        
+        self.speed_command = 0
 
-        # 서브스크라이버 설정
-        self.detection_sub = self.create_subscription(DetectionArray, self.sub_detection_topic, self.detection_callback, self.qos_profile)
-        self.path_sub = self.create_subscription(PathPlanningResult, self.sub_path_topic, self.path_callback, self.qos_profile)
-        self.traffic_light_sub = self.create_subscription(String, self.sub_traffic_light_topic, self.traffic_light_callback, self.qos_profile)
-        self.lidar_sub = self.create_subscription(Bool, self.sub_lidar_obstacle_topic, self.lidar_callback, self.qos_profile)
-
-        # 퍼블리셔 설정
+        # [심플해진 구성] 오직 주차 경로만 구독하고, 모션 명령만 발행함
+        self.parking_path_sub = self.create_subscription(PathPlanningResult, self.sub_parking_path_topic, self.parking_path_callback, self.qos_profile)
         self.publisher = self.create_publisher(MotionCommand, self.pub_topic, self.qos_profile)
-
-        # 타이머 설정
         self.timer = self.create_timer(self.timer_period, self.timer_callback)
-
-    def detection_callback(self, msg: DetectionArray):
-        self.detection_data = msg
-
-    def path_callback(self, msg: PathPlanningResult):
-        self.path_data = list(zip(msg.x_points, msg.y_points))
-                
-    def traffic_light_callback(self, msg: String):
-        self.traffic_light_data = msg
-
-    def lidar_callback(self, msg: Bool):
-        self.lidar_data = msg
         
+        self.get_logger().info("✅ Simple Motion Planner (Parking Only) Started.")
+
+    def parking_path_callback(self, msg: PathPlanningResult):
+        # 주차 플래너로부터 데이터 수신
+        if len(msg.x_points) > 0 and len(msg.y_points) > 0:
+            self.steering_command = msg.x_points[0] # 조향
+            self.speed_command = msg.y_points[0]    # 속도
+            self.last_parking_cmd_time = time.time() # 수신 시간 갱신
+
     def timer_callback(self):
+        current_time = time.time()
+        
+        motion_msg = MotionCommand()
 
-        if self.lidar_data is not None and self.lidar_data.data is True:
-            # 라이다가 장애물을 감지한 경우
-            self.steering_command = 0 
-            self.left_speed_command = 0 
-            self.right_speed_command = 0 
-
-        elif self.traffic_light_data is not None and self.traffic_light_data.data == 'Red':
-            # 빨간색 신호등을 감지한 경우
-            for detection in self.detection_data.detections:
-                if detection.class_name=='traffic_light':
-                    x_min = int(detection.bbox.center.position.x - detection.bbox.size.x / 2) # bbox의 좌측상단 꼭짓점 x좌표
-                    x_max = int(detection.bbox.center.position.x + detection.bbox.size.x / 2) # bbox의 우측하단 꼭짓점 x좌표
-                    y_min = int(detection.bbox.center.position.y - detection.bbox.size.y / 2) # bbox의 좌측상단 꼭짓점 y좌표
-                    y_max = int(detection.bbox.center.position.y + detection.bbox.size.y / 2) # bbox의 우측하단 꼭짓점 y좌표
-
-                    if y_max < 150:
-                        # 신호등 위치에 따른 정지명령 결정
-                        self.steering_command = 0 
-                        self.left_speed_command = 0 
-                        self.right_speed_command = 0
+        # [안전장치] 마지막 명령 수신 후 2.0초가 지나지 않았다면 명령 수행
+        if (current_time - self.last_parking_cmd_time < 2.0):
+            # 조향각 제한 (Clamping)
+            final_steer = max(-MAX_STEERING, min(MAX_STEERING, self.steering_command))
+            
+            motion_msg.steering = int(final_steer)
+            motion_msg.left_speed = int(self.speed_command)
+            motion_msg.right_speed = int(self.speed_command)
+            
+            self.get_logger().info(f"Parking Action -> Steer: {motion_msg.steering}, Speed: {motion_msg.left_speed}")
+            
         else:
-            if self.path_data is None:
-                self.steering_command = 0
-            else:
-                target_slope = DMFL.calculate_slope_between_points(self.path_data[-10], self.path_data[-1])
-                
-                if target_slope > 0:
-                    self.steering_command =  7 # 예시 조향 값 (7이 최대 조향) 
-                elif target_slope < 0:
-                    self.steering_command =  -7
-                else:
-                    self.steering_command = 0
+            # 타임아웃 시 정지 (안전)
+            motion_msg.steering = 0
+            motion_msg.left_speed = 0
+            motion_msg.right_speed = 0
+            # 로그는 너무 자주 찍히지 않게 조절 가능
+            # self.get_logger().warn("No Parking Command! Stopping...", throttle_duration_sec=2)
 
-
-            self.left_speed_command = 100  # 예시 속도 값 (255가 최대 속도)
-            self.right_speed_command = 100  # 예시 속도 값 (255가 최대 속도)
-
-
-
-        self.get_logger().info(f"steering: {self.steering_command}, " 
-                               f"left_speed: {self.left_speed_command}, " 
-                               f"right_speed: {self.right_speed_command}")
-
-        # 모션 명령 메시지 생성 및 퍼블리시
-        motion_command_msg = MotionCommand()
-        motion_command_msg.steering = self.steering_command
-        motion_command_msg.left_speed = self.left_speed_command
-        motion_command_msg.right_speed = self.right_speed_command
-        self.publisher.publish(motion_command_msg)
+        self.publisher.publish(motion_msg)
 
 def main(args=None):
     rclpy.init(args=args)
@@ -135,7 +83,7 @@ def main(args=None):
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
-        print("\n\nshutdown\n\n")
+        pass
     finally:
         node.destroy_node()
         rclpy.shutdown()

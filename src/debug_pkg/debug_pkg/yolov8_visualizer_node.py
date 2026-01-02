@@ -34,6 +34,7 @@ import message_filters
 from cv_bridge import CvBridge
 from ultralytics.utils.plotting import Annotator, colors
 
+from std_msgs.msg import String
 from sensor_msgs.msg import Image
 from visualization_msgs.msg import Marker
 from visualization_msgs.msg import MarkerArray
@@ -52,11 +53,20 @@ class Yolov8VisualizerNode(LifecycleNode):
         self._class_to_color = {}
         self.cv_bridge = CvBridge()
 
+        self._active_camera_name = 'front'  # 기본값
+        self.src_mats = {
+            'front': [[0, 390], [640, 390], [200, 235], [440, 235]],
+            'rear':    [[0, 365], [640, 365], [200, 215], [440, 215]]
+        }
+
         # params
         self.declare_parameter("image_reliability",
                                QoSReliabilityPolicy.RELIABLE)
 
         self.get_logger().info("Debug node created")
+
+    def active_camera_cb(self, msg: String) -> None:
+        self._active_camera_name = msg.data
 
     def on_configure(self, state: LifecycleState) -> TransitionCallbackReturn:
         self.get_logger().info(f'Configuring {self.get_name()}')
@@ -83,9 +93,11 @@ class Yolov8VisualizerNode(LifecycleNode):
 
         # subs
         self.image_sub = message_filters.Subscriber(
-            self, Image, "camera/image_raw", qos_profile=self.image_qos_profile)
+            self, Image, "camera/active/image_raw", qos_profile=self.image_qos_profile)
         self.detections_sub = message_filters.Subscriber(
             self, DetectionArray, "detections", qos_profile=10)
+        self.active_camera_sub = self.create_subscription(
+            String, "camera/select", self.active_camera_cb, 10)
 
         self._synchronizer = message_filters.ApproximateTimeSynchronizer(
             (self.image_sub, self.detections_sub), 10, 0.5)
@@ -98,6 +110,7 @@ class Yolov8VisualizerNode(LifecycleNode):
 
         self.destroy_subscription(self.image_sub.sub)
         self.destroy_subscription(self.detections_sub.sub)
+        self.destroy_subscription(self.active_camera_sub)
 
         del self._synchronizer
 
@@ -266,8 +279,13 @@ class Yolov8VisualizerNode(LifecycleNode):
 
             color = self._class_to_color[label]
 
-            cv_image = self.draw_box(cv_image, detection, color)
-            cv_image = self.draw_mask(cv_image, detection, color)
+            # 노드 이름에 'segmentation'이 포함되어 있고, mask 데이터가 존재하면 mask를 그립니다.
+            if 'segmentation' in self.get_name() and detection.mask.data:
+                cv_image = self.draw_mask(cv_image, detection, color)
+
+            # 그렇지 않으면(일반 detection 모델이거나 mask 데이터가 없으면) 기존처럼 Bounding Box를 그립니다.
+            else:
+                cv_image = self.draw_box(cv_image, detection, color)
             cv_image = self.draw_keypoints(cv_image, detection)
 
             if detection.bbox3d.frame_id:

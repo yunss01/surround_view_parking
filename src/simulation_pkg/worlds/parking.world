@@ -2,7 +2,6 @@
   <world name='default'>
 
     <gui fullscreen='0'> 
-      <plugin name='keyboard' filename='libKeyboardGUIPlugin.so'/>
       <camera name='user_camera'> 
         <pose>0 0 32.8879 3.14159 1.57079 3.14159</pose>       <!-- 초기 시점 -->
         <view_controller>orbit</view_controller>

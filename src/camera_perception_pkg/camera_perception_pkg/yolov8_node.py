@@ -54,14 +54,14 @@ class Yolov8Node(LifecycleNode):
         #---------------Variable Setting---------------
         # 딥러닝 모델 pt 파일명 작성
         #self.declare_parameter("model", "yolov8m.pt")
-        self.declare_parameter("model", "best.pt")
+        self.declare_parameter("model", "/home/sukja/surround_view_parking_simulation/best_pose.pt")
         
         # 추론 하드웨어 선택 (cpu / gpu) 
-        self.declare_parameter("device", "cpu")
-        #self.declare_parameter("device", "cuda:0")
+        #self.declare_parameter("device", "cpu")
+        self.declare_parameter("device", "cuda:0")
         #----------------------------------------------
         
-        self.declare_parameter("threshold", 0.5)
+        self.declare_parameter("threshold", 0.75)
         self.declare_parameter("enable", True)
         self.declare_parameter("image_reliability",
                                QoSReliabilityPolicy.RELIABLE)
@@ -95,6 +95,9 @@ class Yolov8Node(LifecycleNode):
 
         self._pub = self.create_lifecycle_publisher(
             DetectionArray, "detections", 10)
+        # 디버깅용 이미지 퍼블리셔 생성
+        self._debug_pub = self.create_lifecycle_publisher(
+            Image, "yolo_debug_image", 10)
         self._srv = self.create_service(
             SetBool, "enable", self.enable_cb
         )
@@ -123,7 +126,7 @@ class Yolov8Node(LifecycleNode):
         # subs
         self._sub = self.create_subscription(
             Image,
-            "camera/image_raw",
+            "/surround_view/image_raw",
             self.image_cb,
             self.image_qos_profile
         )
@@ -152,6 +155,7 @@ class Yolov8Node(LifecycleNode):
         self.get_logger().info(f'Cleaning up {self.get_name()}')
 
         self.destroy_publisher(self._pub)
+        self.destroy_publisher(self._debug_pub)
 
         del self.image_qos_profile
 
@@ -231,15 +235,14 @@ class Yolov8Node(LifecycleNode):
 
             for kp_id, (p, conf) in enumerate(zip(points.xy[0], points.conf[0])):
 
-                if conf >= self.threshold:
-                    msg = KeyPoint2D()
+                msg = KeyPoint2D()
 
-                    msg.id = kp_id + 1
-                    msg.point.x = float(p[0])
-                    msg.point.y = float(p[1])
-                    msg.score = float(conf)
+                msg.id = kp_id + 1
+                msg.point.x = float(p[0])
+                msg.point.y = float(p[1])
+                msg.score = float(conf)
 
-                    msg_array.data.append(msg)
+                msg_array.data.append(msg)
 
             keypoints_list.append(msg_array)
 
@@ -257,7 +260,8 @@ class Yolov8Node(LifecycleNode):
                 verbose=False,
                 stream=False,
                 conf=self.threshold,
-                device=self.device
+                device=self.device,
+                imgsz=1280
             )
             results: Results = results[0].cpu()
 
@@ -296,6 +300,12 @@ class Yolov8Node(LifecycleNode):
             # publish detections
             detections_msg.header = msg.header
             self._pub.publish(detections_msg)
+
+            # 디버깅용 이미지 발행
+            annotated_frame = results.plot()
+            debug_img_msg = self.cv_bridge.cv2_to_imgmsg(annotated_frame, encoding="bgr8")
+            debug_img_msg.header = msg.header
+            self._debug_pub.publish(debug_img_msg)
 
             del results
             del cv_image

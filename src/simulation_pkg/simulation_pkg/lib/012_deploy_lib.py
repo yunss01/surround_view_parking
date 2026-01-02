@@ -87,21 +87,28 @@ def load_model(entity_name, model_name, random_coordinates):
     model_file = get_model(model_name)
     os.system(f"ros2 run gazebo_ros spawn_entity.py -file {model_file} -entity {entity_name} -x {x} -y {y} -z {z} -R {roll} -P {pitch} -Y {yaw}")
 
-def driving_ego():  
-    x_min = -2.568994
-    x_max = -2.526850
+def driving_ego():  # 내 차!
+    x_min = 2.178 # 왼쪽 시작 
+    x_max = 2.189 # 기본: 2.178
     
-    y_min = -22.750868 
-    y_max = -22.666580
+    y_min = 16.089 
+    y_max = 16.090 # 기본: 16.089 
+
+    # x_min = 2.099 # 오른쪽 시작
+    # x_max = 2.100
+    
+    # y_min = -16.794
+    # y_max = -16.793
     
     random_x = random.uniform(x_min, x_max)
     random_y = random.uniform(y_min, y_max)
     
     z = 0.011641
 
-    r = -0.0
+    r = 0.0
     p = 0.0
-    y = 1.563693 # 1.585076
+    y = -0.007106 # 왼쪽 시작
+    # y = 3.134727 # 오른쪽 시작
 
     return random_x, random_y, z, r, p, y
 
@@ -140,11 +147,12 @@ def traffic_light_stand(): # 신호등
     return random_x, random_y, z, r, p, y
 
 # 장애물 회피 차량 + 범위 지정 + 랜덤
-model_types = ["prius_hybrid_ob1", "prius_hybrid_ob2", "prius_hybrid_ob3", "hatchback_green", "hatchback_yellow"] 
+model_types = ["prius_hybrid_ob1", "prius_hybrid_ob2", "prius_hybrid_ob3", "hatchback_green", "hatchback_yellow", "hatchback_green"] 
 
 obstacle_coordinates1 = (12.251981, -15.909271, 0.00, 0.00, 0.00, 2.484252)
 obstacle_coordinates_1= (-3.659642, 8.710748, 0.00, 0.00, 0.00, -0.013934)
 obstacle_coordinates_2= (-3.659642, 2.037476, 0.00, 0.00, 0.00, -0.013934)
+obstacle_coordinates_3= (-3.636491, -1.428019, 0.00, 0.00, 0.00, -0.013934)
 
 obstacle_coordinates2 = [(11.884767, 11.605120), (12.040719, 10.060495), (12.230394, 8.181866)]
 obstacle_coordinates3 = [(16.106836, -0.111269), (16.281788, -1.844067), (16.366463, -3.446680)]
