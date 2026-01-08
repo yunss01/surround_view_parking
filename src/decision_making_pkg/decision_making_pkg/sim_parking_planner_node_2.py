@@ -65,8 +65,11 @@ class ParkingPlannerNode2(Node):
         self.max_steering = 7.0 # 하드웨어 최대 조향각
 
         # 접근 시간 (튜닝 필요)
-        self.approach_duration_map = {1: 10.0, 2: 14.0, 3: 18.0, 4: 22.0}
+        self.approach_duration_map = {1: 9.6, 2: 13.6, 3: 17.6, 4: 21.6}
         self.approach_speed = 50.0
+
+        # 주차칸별 Arc 2 종료 각도 오차
+        self.arc2_finish_threshold_map = {1: 3.0, 2: 3.0, 3: 2.8, 4: 2.0}
 
         self.state = ParkingState.READY
         self.target_spot_id = None
@@ -76,22 +79,25 @@ class ParkingPlannerNode2(Node):
         # [Target Locking Variables]
         self.locked_target_angle = 0.0  # 고정된 타겟 각도
         self.locked_target_pos = (0, 0) # 고정된 타겟 위치 (상대좌표 아님, 초기 기준)
-        self.is_path_calculated = False
         
         # [Dual Smoothing Variables]
-        self.smooth_lat_error = 0.0
         self.smooth_heading_error = 0.0
         self.prev_steer = 0.0
         
         # [Two-Arc Params]
-        self.switch_angle_threshold = 45.0 # 1차 회전 목표 각도 (Swing Out 각도)
+        self.switch_angle_threshold = 30.0 # 1차 회전 목표 각도 (Swing Out 각도)
         
         self.qos = QoSProfile(reliability=QoSReliabilityPolicy.RELIABLE, history=QoSHistoryPolicy.KEEP_LAST, depth=1)
         self.bev_sub = self.create_subscription(BevPerceptionResult, SUB_BEV_PERCEPTION_TOPIC, self.bev_callback, self.qos)
         self.path_pub = self.create_publisher(PathPlanningResult, PUB_PARKING_PATH_TOPIC, self.qos)
         self.status_pub = self.create_publisher(String, PUB_PARKING_STATUS_TOPIC, self.qos)
 
-        self.timer = self.create_timer(0.1, self.control_loop)
+        # ARC 1 시작 시점의 각도를 저장할 변수
+        self.start_arc1_angle = None
+        # 한 번 직진 모드가 되면 절대 안 풀리게 하는 변수
+        self.force_straight_active = False
+
+        self.timer = self.create_timer(0.05, self.control_loop)
         self.get_logger().info("✅ Two-Arc Parking Planner (Node 2) Started.")
 
     def bev_callback(self, msg: BevPerceptionResult):
@@ -100,8 +106,6 @@ class ParkingPlannerNode2(Node):
     def set_target_spot(self, idx):
         self.target_spot_id = idx
         self.state_start_time = self.get_clock().now()
-        self.is_path_calculated = False
-        self.smooth_lat_error = 0.0
         self.smooth_heading_error = 0.0
         self.state = ParkingState.APPROACHING
         self.get_logger().info(f"Start Approaching Spot {idx}...")
@@ -116,11 +120,7 @@ class ParkingPlannerNode2(Node):
         dy = obj.p2_bev.y - obj.p1_bev.y
         angle_rad = math.atan2(dy, dx)
         angle_deg = math.degrees(angle_rad)
-        angle_deg = abs(angle_deg) % 180
-        if angle_deg > 90: angle_deg = 180 - angle_deg
-        
-        # [보정] 거의 수평이면 0으로 간주 (Jitter 방지)
-        if angle_deg < 3.0: return 0.0
+
         return angle_deg
 
     def control_loop(self):
@@ -171,9 +171,14 @@ class ParkingPlannerNode2(Node):
         - 현재 위치에서 1차 회전(Swing Out)을 얼마나 해야 2차 회전(Reverse)으로 딱 들어갈지 계산.
         - 오도메트리가 없으므로, '각도'를 기준으로 스위칭 포인트를 잡음.
         """
-        # (구현 단순화) 시뮬레이션 환경에 맞춰 45도 각도 확보를 목표로 설정
-        # 실제 논문 수식은 R_min 등을 알아야 하므로, 여기서는 Heuristic하게 45도로 고정
-        self.switch_angle_threshold = 45.0 
+        target_obj = self.get_tracked_target()
+        if target_obj:
+            # 현재 각도를 '시작 각도'로 저장
+            self.start_arc1_angle = self.calculate_entrance_angle(target_obj)
+            self.get_logger().info(f"Reference Angle Saved: {self.start_arc1_angle:.2f}")
+        else:
+            # 타겟이 없으면 90도로 가정 (Fallback)
+            self.start_arc1_angle = -90.0
         
         self.get_logger().info(f"Path Calculated. Switch Angle: {self.switch_angle_threshold} deg.")
         self.state = ParkingState.ARC_1_SWING
@@ -190,17 +195,16 @@ class ParkingPlannerNode2(Node):
             return
 
         current_angle = self.calculate_entrance_angle(target_obj)
+        delta_angle = abs(current_angle - self.start_arc1_angle)
+        if delta_angle > 180.0:
+            delta_angle = 360.0 - delta_angle
         
-        # 목표 각도(45도 이상)가 되면 정지 및 전환
-        # 주의: 각도 정의에 따라 90도에서 줄어드는지, 0도에서 늘어나는지 확인 필요
-        # (기존 코드 기준: 90도(수직) -> 0도(수평)으로 변함. Swing Out하면 각도가 줄어듦?)
-        # 확인: Swing Out(좌회전)하면 차가 기울어지므로 입구 라인 각도는 변함.
-        # 실험적으로 60도 이하가 되면 충분히 꺾은 것으로 판단 (기존 로직 유지)
-        
-        if current_angle < 60.0: # 45~60도 사이면 충분
+        # 시작 각도: 약 90도 (또는 -90도)
+        # 목표 회전량(30도)을 넘었는지 확인
+        if delta_angle > self.switch_angle_threshold:
             self.publish_control(0.0, 0.0)
             time.sleep(0.5)
-            self.get_logger().info(f"Arc 1 Finished. Angle={current_angle:.1f}. Switching to Reverse.")
+            self.get_logger().info(f"Arc 1 Finished. Rotated {delta_angle:.1f} deg. Ready to Reverse.")
             self.state = ParkingState.ARC_2_REVERSE
             return
 
@@ -212,78 +216,50 @@ class ParkingPlannerNode2(Node):
         target_obj = self.get_tracked_target()
 
         if target_obj is None:
-            self.publish_control(-self.max_steering, -50.0) # 궤적 유지
+            self.publish_control(-self.max_steering, -30.0) # 궤적 유지
             return
 
         current_angle = self.calculate_entrance_angle(target_obj)
+
+        # 현재 타겟 번호에 맞는 허용 오차 가져오기 (기본값 3.0)
+        target_threshold = self.arc2_finish_threshold_map.get(self.target_spot_id, 3.0)
         
         # [핵심] Two-Arc 이론상, 이 단계가 끝나면 차는 주차칸과 평행(0도)해야 함
-        if abs(current_angle) < 10.0: # 거의 평행해지면
-            self.publish_control(0.0, 0.0)
+        if abs(current_angle) < target_threshold:
+            self.publish_control(0.0, 0.0, alpha=1.0)
             time.sleep(0.5)
-            self.smooth_lat_error = 0.0
             self.smooth_heading_error = 0.0
             self.get_logger().info(f"Arc 2 Finished. Aligned ({current_angle:.1f}). Fine Tuning...")
             self.state = ParkingState.ALIGNMENT
             return
 
-        self.publish_control(-self.max_steering, -50.0) # 우회전 후진
+        self.publish_control(-self.max_steering, -30.0) # 우회전 후진
 
     # --- 6. 정렬 (Hybrid Dual Smoothing) ---
     def run_alignment(self):
-        """위치는 민감하게, 각도는 둔감하게 보정"""
         target_obj = self.get_tracked_target()
-
+        
+        # 타겟 거리 확인용 (조향용 아님)
         if target_obj is None:
-            self.publish_control(self.prev_steer, -40.0)
+            # 타겟을 놓쳐도 핸들이 0이므로 그냥 뒤로 조금 더 가도 안전함
+            # 하지만 안전을 위해 정지하거나, 아주 천천히 후진
+            self.publish_control(0.0, 0.0)
+            self.get_logger().warn("Target lost in Blind Reverse. Stopping.")
             return
 
-        # 에러 계산
-        raw_lat_error = target_obj.center_bev.x - self.BEV_CENTER_X
-        raw_heading_error = self.calculate_entrance_angle(target_obj)
+        # 거리만 계산 (y축 기준)
         dist_y = abs(target_obj.center_bev.y - self.BEV_CENTER_Y)
 
-        # [Dual Smoothing]
-        # 위치(Lat): alpha 0.4 (민감)
-        # 각도(Ang): alpha 0.3 (둔감 - Jitter 무시)
-        lat_alpha = 0.4
-        head_alpha = 0.3
-        
-        if self.smooth_lat_error == 0.0: self.smooth_lat_error = raw_lat_error
-        else: self.smooth_lat_error = (lat_alpha * raw_lat_error) + ((1-lat_alpha)*self.smooth_lat_error)
-        
-        if self.smooth_heading_error == 0.0: self.smooth_heading_error = raw_heading_error
-        else: self.smooth_heading_error = (head_alpha * raw_heading_error) + ((1-head_alpha)*self.smooth_heading_error)
-
-        # 종료 조건
-        if dist_y <15 and abs(self.smooth_heading_error) < 3.0:
+        # [종료 조건] 거리가 충분히 가까워지면 정지
+        if dist_y < 20: # 20 픽셀 이내면 주차 완료
             self.state = ParkingState.FINISHED
-            return
-        elif dist_y < 8: # 안전장치: 너무 깊으면 각도 안 맞아도 일단 정지
-            self.state = ParkingState.FINISHED
+            self.publish_control(0.0, 0.0)
+            self.get_logger().info(f"Success! Parking Finished (DistY: {dist_y:.1f}).")
             return
 
-        # 거의 다 들어왔거나(25px), 오차가 매우 작으면 핸들을 정렬(0)해버림
-        if dist_y < 25: 
-            raw_steer = 0.0
-        elif abs(self.smooth_lat_error) < 5.0 and abs(self.smooth_heading_error) < 1.5:
-            raw_steer = 0.0
-        else:
-            # 4. PID 제어 (Gain 완화)
-            Kp_lat = 0.12 # 0.15 -> 0.12
-            Kp_ang = 0.45 # 0.6 -> 0.45 (과잉 회전 방지)
-            
-            if abs(self.smooth_lat_error) > 50:
-                Kp_ang = 0.15
-
-            # 조향 계산 (부호 - 유지)
-            raw_steer = -((Kp_lat * self.smooth_lat_error) + (Kp_ang * self.smooth_heading_error))
-        steer = np.clip(raw_steer, -self.max_steering, self.max_steering)
-        
-        speed = -40.0
-        
-        self.publish_control(steer, speed, alpha=0.1)
-        self.get_logger().info(f"Aligning: X_err={self.smooth_lat_error:.1f}, Ang_err={self.smooth_heading_error:.1f} -> Steer={steer:.1f}")
+        # [핵심] 무조건 조향 0.0, 후진 -30.0
+        # 흔들릴 이유를 원천 차단
+        self.publish_control(0.0, -30.0, alpha=1.0)
 
     def run_finished(self):
         self.publish_control(0.0, 0.0)
@@ -320,6 +296,11 @@ class ParkingPlannerNode2(Node):
         # 위치 업데이트
         self.locked_target_pos = (best_target.center_bev.x, best_target.center_bev.y)
         return best_target
+
+    def normalize_angle(self, ang_deg: float) -> float:
+        """Normalize angle to [-180, 180]."""
+        a = (ang_deg + 180.0) % 360.0 - 180.0
+        return a
 
     def publish_control(self, steer, speed, alpha=0.7):
         filtered_steer = (alpha * steer) + ((1 - alpha) * self.prev_steer)

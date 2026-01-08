@@ -61,7 +61,7 @@ class Yolov8Node(LifecycleNode):
         self.declare_parameter("device", "cuda:0")
         #----------------------------------------------
         
-        self.declare_parameter("threshold", 0.75)
+        self.declare_parameter("threshold", 0.7)
         self.declare_parameter("enable", True)
         self.declare_parameter("image_reliability",
                                QoSReliabilityPolicy.RELIABLE)

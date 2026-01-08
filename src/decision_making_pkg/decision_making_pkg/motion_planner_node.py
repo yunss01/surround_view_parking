@@ -8,7 +8,7 @@ import time
 SUB_PARKING_PATH_TOPIC_NAME = "parking_path"
 PUB_TOPIC_NAME = "topic_control_signal"
 
-TIMER = 0.1
+TIMER = 0.05
 MAX_STEERING = 7.0 
 #----------------------------------------------
 
@@ -34,10 +34,10 @@ class MotionPlanningNode(Node):
         self.last_parking_cmd_time = 0.0
         
         # 명령값 저장 변수
-        self.steering_command = 0
-        self.speed_command = 0
+        self.steering_command = 0.0
+        self.speed_command = 0.0
 
-        # [심플해진 구성] 오직 주차 경로만 구독하고, 모션 명령만 발행함
+        # 오직 주차 경로만 구독하고, 모션 명령만 발행함
         self.parking_path_sub = self.create_subscription(PathPlanningResult, self.sub_parking_path_topic, self.parking_path_callback, self.qos_profile)
         self.publisher = self.create_publisher(MotionCommand, self.pub_topic, self.qos_profile)
         self.timer = self.create_timer(self.timer_period, self.timer_callback)
@@ -47,8 +47,8 @@ class MotionPlanningNode(Node):
     def parking_path_callback(self, msg: PathPlanningResult):
         # 주차 플래너로부터 데이터 수신
         if len(msg.x_points) > 0 and len(msg.y_points) > 0:
-            self.steering_command = msg.x_points[0] # 조향
-            self.speed_command = msg.y_points[0]    # 속도
+            self.steering_command = float(msg.x_points[0]) # 조향
+            self.speed_command = float(msg.y_points[0]) # 속도
             self.last_parking_cmd_time = time.time() # 수신 시간 갱신
 
     def timer_callback(self):
@@ -61,19 +61,17 @@ class MotionPlanningNode(Node):
             # 조향각 제한 (Clamping)
             final_steer = max(-MAX_STEERING, min(MAX_STEERING, self.steering_command))
             
-            motion_msg.steering = int(final_steer)
-            motion_msg.left_speed = int(self.speed_command)
-            motion_msg.right_speed = int(self.speed_command)
+            motion_msg.steering = float(final_steer)
+            motion_msg.left_speed = float(self.speed_command)
+            motion_msg.right_speed = float(self.speed_command)
             
             self.get_logger().info(f"Parking Action -> Steer: {motion_msg.steering}, Speed: {motion_msg.left_speed}")
             
         else:
             # 타임아웃 시 정지 (안전)
-            motion_msg.steering = 0
-            motion_msg.left_speed = 0
-            motion_msg.right_speed = 0
-            # 로그는 너무 자주 찍히지 않게 조절 가능
-            # self.get_logger().warn("No Parking Command! Stopping...", throttle_duration_sec=2)
+            motion_msg.steering = 0.0
+            motion_msg.left_speed = 0.0
+            motion_msg.right_speed = 0.0
 
         self.publisher.publish(motion_msg)
 
