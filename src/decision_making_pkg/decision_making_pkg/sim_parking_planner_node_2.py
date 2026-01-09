@@ -9,6 +9,11 @@ import threading
 import tkinter as tk
 from std_msgs.msg import String
 from interfaces_pkg.msg import BevPerceptionResult, PathPlanningResult
+import csv  # 엑셀(CSV) 저장용
+import os   # 파일 경로 확인용
+from datetime import datetime
+from nav_msgs.msg import Odometry # 오도메트리 메시지 타입
+from geometry_msgs.msg import Quaternion # 쿼터니언 변환용
 
 #---------------Variable Setting---------------
 SUB_BEV_PERCEPTION_TOPIC = "bev_perception_result"
@@ -91,6 +96,14 @@ class ParkingPlannerNode2(Node):
         self.bev_sub = self.create_subscription(BevPerceptionResult, SUB_BEV_PERCEPTION_TOPIC, self.bev_callback, self.qos)
         self.path_pub = self.create_publisher(PathPlanningResult, PUB_PARKING_PATH_TOPIC, self.qos)
         self.status_pub = self.create_publisher(String, PUB_PARKING_STATUS_TOPIC, self.qos)
+        self.odom_sub = self.create_subscription(Odometry, '/odom', self.odom_callback, self.qos)
+        self.current_odom = {'x':0.0, 'y':0.0, 'yaw':0.0} # (x, y, yaw) 저장용
+        self.IDEAL_POSES = {
+            1: {'x': -3.15, 'y': 8.693, 'yaw': 90.0},
+            2: {'x': -3.15,  'y': 5.302, 'yaw': 90.0},
+            3: {'x': -3.15,  'y': 1.945, 'yaw': 90.0},
+            4: {'x': -3.15,  'y': -1.411, 'yaw': 90.0}
+        }
 
         # ARC 1 시작 시점의 각도를 저장할 변수
         self.start_arc1_angle = None
@@ -107,6 +120,7 @@ class ParkingPlannerNode2(Node):
         self.target_spot_id = idx
         self.state_start_time = self.get_clock().now()
         self.smooth_heading_error = 0.0
+        self.evaluation_saved = False
         self.state = ParkingState.APPROACHING
         self.get_logger().info(f"Start Approaching Spot {idx}...")
 
@@ -263,6 +277,11 @@ class ParkingPlannerNode2(Node):
 
     def run_finished(self):
         self.publish_control(0.0, 0.0)
+        # 최초 1회만 저장하기 위한 플래그 처리 필요 (안 그러면 루프마다 저장됨)
+        if not getattr(self, 'evaluation_saved', False):
+            self.save_evaluation_data()
+            self.evaluation_saved = True # 저장 완료 플래그
+
         if hasattr(self, 'gui_handle') and self.gui_handle:
             self.gui_handle.root.after(3000, self.gui_handle.close)
 
@@ -309,6 +328,64 @@ class ParkingPlannerNode2(Node):
         msg.x_points = [float(filtered_steer)]
         msg.y_points = [float(speed)]
         self.path_pub.publish(msg)
+
+    def odom_callback(self, msg: Odometry):
+        # 위치 저장
+        self.current_odom['x'] = msg.pose.pose.position.x
+        self.current_odom['y'] = msg.pose.pose.position.y
+        
+        # 쿼터니언 -> 오일러(Yaw) 변환
+        q = msg.pose.pose.orientation
+        siny_cosp = 2 * (q.w * q.z + q.x * q.y)
+        cosy_cosp = 1 - 2 * (q.y * q.y + q.z * q.z)
+        yaw_rad = math.atan2(siny_cosp, cosy_cosp)
+        self.current_odom['yaw'] = math.degrees(yaw_rad)
+
+    def save_evaluation_data(self):
+        if self.target_spot_id is None: return
+
+        # 1. 시간 계산
+        end_time = self.get_clock().now()
+        duration = (end_time - self.state_start_time).nanoseconds / 1e9
+        
+        # 2. 오차 계산 (현재 Odom vs 정답지)
+        ideal = self.IDEAL_POSES.get(self.target_spot_id, {'x':0, 'y':0, 'yaw':0})
+        
+        # Lateral Error: 유클리드 거리 (cm 단위 변환)
+        dist_error_m = math.sqrt((self.current_odom['x'] - ideal['x'])**2 + 
+                                 (self.current_odom['y'] - ideal['y'])**2)
+        lateral_error_cm = dist_error_m * 100.0
+        
+        # Heading Error: 각도 차이 (절대값)
+        yaw_diff = abs(self.current_odom['yaw'] - ideal['yaw'])
+        # 각도 차이는 180도를 넘을 수 없음 (예: 350도와 10도 차이는 20도)
+        if yaw_diff > 180: yaw_diff = 360 - yaw_diff
+        
+        # 3. CSV 저장
+        filename = f"parking_evaluation_spot_{self.target_spot_id}.csv"
+        file_exists = os.path.isfile(filename)
+        
+        with open(filename, mode='a', newline='') as file:
+            writer = csv.writer(file)
+            # 헤더 작성 (파일 처음 만들 때만)
+            if not file_exists:
+                writer.writerow(['Date', 'Target_Spot', 'Duration(s)', 'Lateral_Err(cm)', 'Heading_Err(deg)', 'Final_X', 'Final_Y', 'Final_Yaw'])
+            
+            # 데이터 작성
+            writer.writerow([
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                self.target_spot_id,
+                f"{duration:.2f}",
+                f"{lateral_error_cm:.2f}",
+                f"{yaw_diff:.2f}",
+                f"{self.current_odom['x']:.3f}",
+                f"{self.current_odom['y']:.3f}",
+                f"{self.current_odom['yaw']:.3f}"
+            ])
+            
+        self.get_logger().info(f"📊 Evaluation Saved to {filename}!")
+        self.get_logger().info(f"   Time: {duration:.1f}s, LatErr: {lateral_error_cm:.1f}cm, AngErr: {yaw_diff:.1f}deg")
+        self.get_logger().info(f"   Current Pose: x={self.current_odom['x']:.2f}, y={self.current_odom['y']:.2f}, yaw={self.current_odom['yaw']:.2f}")
 
 def main(args=None):
     rclpy.init(args=args)
