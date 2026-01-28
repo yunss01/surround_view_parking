@@ -21,9 +21,9 @@ def generate_launch_description():
             cmd=['gazebo', '--verbose', world_file, '-s', 'libgazebo_ros_factory.so'], 
             output='screen'),
         
-        ExecuteProcess(
-            cmd=['rqt'], 
-            output='screen'),
+        # ExecuteProcess(
+        #     cmd=['rqt'], 
+        #     output='screen'),
         
         # Node(
         #     package='simulation_pkg', 
@@ -93,7 +93,7 @@ def generate_launch_description():
 
         Node(
             package='decision_making_pkg', 
-            executable='sim_parking_planner_node',
+            executable='sim_parking_planner_node_repeat',
             output='screen'
         ),
        
