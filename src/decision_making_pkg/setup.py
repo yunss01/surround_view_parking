@@ -24,6 +24,7 @@ setup(
             'path_planner_node = decision_making_pkg.path_planner_node:main',
             'sim_parking_planner_node = decision_making_pkg.sim_parking_planner_node:main',
             'sim_parking_planner_node_repeat = decision_making_pkg.sim_parking_planner_node_repeat:main',
+            'parking_planner_node = decision_making_pkg.parking_planner_node:main',
         ],
     },
 )

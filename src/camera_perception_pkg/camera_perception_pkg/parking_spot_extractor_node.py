@@ -23,9 +23,10 @@ DEBUG_IMAGE_TOPIC_NAME = "bev_perception_image"
 SHOW_IMAGE = True
 
 # 물리적 수치 설정
-CAR_LENGTH_M = 2.86      # 차량 전체 길이 (m)
+CAR_LENGTH_M = 1.0      # 차량 전체 길이 (m)
 CAR_LENGTH_PX = 340.0    # 서라운드뷰 상 차량 길이 (pixels)
-PARKING_DEPTH_M = 1.58  # 입구에서 중심점까지의 거리 (3.16m / 2)
+METER_PER_PIXEL = CAR_LENGTH_M / CAR_LENGTH_PX
+PARKING_DEPTH_M = 0.75  # 입구에서 중심점까지의 거리 (1.5m / 2)
 #----------------------------------------------
 
 # 1픽셀당 미터 (Scale Factor)
