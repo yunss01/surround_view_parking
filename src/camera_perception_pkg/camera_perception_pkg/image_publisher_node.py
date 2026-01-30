@@ -13,7 +13,7 @@ CAM_ID_BACK  = 2
 CAM_ID_LEFT  = 4
 CAM_ID_RIGHT = 6
 
-# 발행할 토픽 이름 (surroundview_node에서 받는 이름과 일치시켜야 함)
+# 발행할 토픽 이름
 TOPIC_FRONT = '/fo_camera/image_raw'
 TOPIC_BACK  = '/rear_camera/image_raw'
 TOPIC_LEFT  = '/left_camera/image_raw'

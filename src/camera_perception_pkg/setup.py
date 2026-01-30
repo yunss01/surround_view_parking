@@ -27,6 +27,7 @@ setup(
             'parking_spot_extractor_node = camera_perception_pkg.parking_spot_extractor_node:main',
             'surroundview_node = camera_perception_pkg.surroundview_node:main',
             'surroundview_maker = camera_perception_pkg.surroundview_maker:main',
+            'fisheye_intrinsic_node = camera_perception_pkg.fisheye_intrinsic_node:main',
             'surround_calibration_node = camera_perception_pkg.surround_calibration_node:main',
             'surround_stitching_node = camera_perception_pkg.surround_stitching_node:main',
         ],
