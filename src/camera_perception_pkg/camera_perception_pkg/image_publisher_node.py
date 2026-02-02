@@ -48,14 +48,26 @@ class MultiCameraPublisher(Node):
 
     def init_camera(self, dev_id, name):
         cap = cv2.VideoCapture(dev_id)
-        if not cap.isOpened():
-            self.get_logger().error(f"❌ Failed to open {name} Camera (ID: {dev_id})")
-            return None
+        
+        # [핵심 수정] MJPG 압축 포맷 설정 (대역폭 절약)
+        # 이 설정이 없으면 USB 대역폭이 꽉 차서 2~3대 이상 켜면 멈춥니다.
+        fourcc = cv2.VideoWriter_fourcc('M', 'J', 'P', 'G')
+        cap.set(cv2.CAP_PROP_FOURCC, fourcc)
         
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, FRAME_WIDTH)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, FRAME_HEIGHT)
-        # cap.set(cv2.CAP_PROP_FPS, FPS) # 지원되는 경우만 동작
-        self.get_logger().info(f"✅ {name} Camera (ID: {dev_id}) Initialized.")
+        
+        if not cap.isOpened():
+            self.get_logger().error(f"❌ Failed to open {name} Camera (ID: {dev_id})")
+            return None
+            
+        # 실제로 잘 열렸는지 확인하기 위해 한 프레임 읽어보기
+        ret, _ = cap.read()
+        if not ret:
+            self.get_logger().warn(f"⚠️ {name} (ID: {dev_id}) opened but failed to read first frame.")
+        else:
+            self.get_logger().info(f"✅ {name} Camera (ID: {dev_id}) Initialized & Stream Ready.")
+            
         return cap
 
     def read_and_publish(self, cap, publisher, name):
@@ -63,20 +75,22 @@ class MultiCameraPublisher(Node):
 
         ret, frame = cap.read()
         if ret:
-            # ROS 메시지로 변환
             msg = self.bridge.cv2_to_imgmsg(frame, encoding="bgr8")
             msg.header.stamp = self.get_clock().now().to_msg()
             msg.header.frame_id = "base_link"
             publisher.publish(msg)
+            # cv2.imshow(f"Monitor: {name}", frame)
         else:
-            self.get_logger().warn(f"⚠️ Failed to read frame from {name} camera")
+            # 실패 로그가 너무 많이 뜨면 시스템이 느려지므로 10번에 한 번만 뜨게 하거나
+            # 여기서는 일단 그대로 둡니다.
+            self.get_logger().warn(f"⚠️ Failed to read frame from {name} camera", throttle_duration_sec=2.0)
 
     def timer_callback(self):
-        # 4개의 카메라에서 이미지를 읽어서 각각 발행
         self.read_and_publish(self.cap_front, self.pub_front, "Front")
         self.read_and_publish(self.cap_back,  self.pub_back,  "Back")
         self.read_and_publish(self.cap_left,  self.pub_left,  "Left")
         self.read_and_publish(self.cap_right, self.pub_right, "Right")
+        cv2.waitKey(1)
 
 def main(args=None):
     rclpy.init(args=args)
@@ -86,11 +100,11 @@ def main(args=None):
     except KeyboardInterrupt:
         pass
     finally:
-        # 종료 시 자원 해제
         if node.cap_front: node.cap_front.release()
         if node.cap_back: node.cap_back.release()
         if node.cap_left: node.cap_left.release()
         if node.cap_right: node.cap_right.release()
+        cv2.destroyAllWindows()
         node.destroy_node()
         rclpy.shutdown()
 
