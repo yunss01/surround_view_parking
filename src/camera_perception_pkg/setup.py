@@ -30,6 +30,8 @@ setup(
             'fisheye_intrinsic_node = camera_perception_pkg.fisheye_intrinsic_node:main',
             'surround_calibration_node = camera_perception_pkg.surround_calibration_node:main',
             'surround_stitching_node = camera_perception_pkg.surround_stitching_node:main',
+            'run_click_calibration = camera_perception_pkg.run_click_calibration:main',
+            'OHB_surround = camera_perception_pkg.OHB_surround:main',
         ],
     },
 )

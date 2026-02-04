@@ -8,8 +8,8 @@ import cv2
 # 카메라 디바이스 번호 (ls /dev/video* 로 확인 필요)
 # 보통 순서대로 0, 2, 4, 6 등으로 잡히거나 0, 1, 2, 3으로 잡힙니다.
 # 실제 꽂아보면서 어느 번호가 앞/뒤/좌/우 인지 확인해서 매핑해야 합니다.
-CAM_ID_FRONT = 0
-CAM_ID_BACK  = 2
+CAM_ID_FRONT = 2
+CAM_ID_BACK  = 0
 CAM_ID_LEFT  = 4
 CAM_ID_RIGHT = 6
 
