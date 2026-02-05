@@ -1,0 +1,32 @@
+back:
+  cb: 67
+  cl: 0
+  cr: 0
+  ct: 0
+  r: 0.0
+  x: 0
+  y: 420
+front:
+  cb: 97
+  cl: 0
+  cr: 0
+  ct: 0
+  r: 0.0
+  x: 0
+  y: -420
+left:
+  cb: 112
+  cl: 100
+  cr: 100
+  ct: 0
+  r: 0.0
+  x: -310
+  y: 0
+right:
+  cb: 109
+  cl: 100
+  cr: 100
+  ct: 0
+  r: 0.0
+  x: 310
+  y: 0

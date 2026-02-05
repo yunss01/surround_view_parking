@@ -93,7 +93,7 @@ def generate_launch_description():
 
         Node(
             package='decision_making_pkg', 
-            executable='sim_parking_planner_node_repeat',
+            executable='sim_parking_planner_node',
             output='screen'
         ),
        

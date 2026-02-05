@@ -144,20 +144,39 @@ def main():
     # 중요: 앞/뒤는 가로로 긴 직사각형, 좌/우는 세로로 긴 직사각형 형태로 펴야 이쁩니다.
     # (BEV 이미지 크기가 640x480일 때의 좌표 예시)
     
-    shift_w = 0
-    shift_h = 0
+    # 이미지 중앙 좌표 (640x480 기준)
+    cx, cy = 320, 240
     
+    # 한 칸당 20픽셀로 가정
+    # 10칸(긴쪽) = 200px
+    # 7칸(짧은쪽) = 140px
+
     if args.camera in ['front', 'back']:
-        # 가로형 체커보드 배치 (앞/뒤)
+        # [앞/뒤 카메라] 
+        # 체커보드 긴 쪽(10칸)을 가로로 두세요.
+        # 가로 폭: 200px, 세로 높이: 140px
+        half_w = 30 
+        half_h = 21
+        
         dst_points = np.array([
-            [220, 100], [420, 100],  # 좌상, 우상
-            [420, 300], [220, 300]   # 우하, 좌하
+            [cx - half_w, cy - half_h],  # 좌상
+            [cx + half_w, cy - half_h],  # 우상
+            [cx + half_w, cy + half_h],  # 우하
+            [cx - half_w, cy + half_h]   # 좌하
         ], dtype=np.float32)
+    
     else:
-        # 세로형 체커보드 배치 (좌/우) - 약간 길쭉하게
+        # [좌/우 카메라]
+        # 체커보드 짧은 쪽(7칸)을 가로로 두세요. (차 밖으로 길게 뻗어나가는 모양)
+        # 가로 폭: 140px, 세로 높이: 200px
+        half_w = 21
+        half_h = 30
+        
         dst_points = np.array([
-            [270, 50],  [370, 50],   # 좌상, 우상
-            [370, 430], [270, 430]   # 우하, 좌하
+            [cx - half_w, cy - half_h],  # 좌상
+            [cx + half_w, cy - half_h],  # 우상
+            [cx + half_w, cy + half_h],  # 우하
+            [cx - half_w, cy + half_h]   # 좌하
         ], dtype=np.float32)
 
     # 5. 사용자 클릭 (SRC 좌표)

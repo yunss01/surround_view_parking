@@ -69,10 +69,10 @@ class ParkingPlannerNode2(Node):
         self.current_odom = {'x':0.0, 'y':0.0, 'yaw':0.0} 
         
         self.IDEAL_POSES = {
-            1: {'x': -3.15, 'y': 8.572, 'yaw': 90.0},
-            2: {'x': -3.15,  'y': 5.302, 'yaw': 90.0},
-            3: {'x': -3.15,  'y': 1.945, 'yaw': 90.0},
-            4: {'x': -3.15,  'y': -1.452, 'yaw': 90.0}
+            1: {'x': -3.263, 'y': 8.659, 'yaw': 90.0},
+            2: {'x': -3.263,  'y': 5.302, 'yaw': 90.0},
+            3: {'x': -3.263,  'y': 1.883, 'yaw': 90.0},
+            4: {'x': -3.263,  'y': -1.452, 'yaw': 90.0}
         }
 
         self.start_arc1_angle = None
@@ -192,7 +192,7 @@ class ParkingPlannerNode2(Node):
 
         dist_y = abs(target_obj.center_bev.y - self.BEV_CENTER_Y)
 
-        if dist_y < 20: 
+        if dist_y < 80: 
             self.state = ParkingState.FINISHED
             self.publish_control(0.0, 0.0)
             self.get_logger().info(f"Success! Parking Finished (DistY: {dist_y:.1f}).")
