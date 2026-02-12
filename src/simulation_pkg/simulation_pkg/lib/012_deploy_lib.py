@@ -150,10 +150,12 @@ def traffic_light_stand(): # 신호등
 model_types = ["prius_hybrid_ob1", "prius_hybrid_ob2", "prius_hybrid_ob3", "hatchback_green", "hatchback_yellow", "hatchback_green"] 
 
 obstacle_coordinates1 = (12.251981, -15.909271, 0.00, 0.00, 0.00, 2.484252)
-obstacle_coordinates_1= (-3.659642, 8.710748, 0.00, 0.00, 0.00, -0.013934)
-obstacle_coordinates_2= (-3.659642, 2.037476, 0.00, 0.00, 0.00, -0.013934)
-obstacle_coordinates_3= (-3.636491, -1.428019, 0.00, 0.00, 0.00, -0.013934)
 
+obstacle_coordinates_1= (-3.636491, 8.710748, 0.00, 0.00, 0.00, -0.013934) # 주차공간 1번
+obstacle_coordinates_2= (-3.636491, 5.299814, 0.00, 0.00, 0.00, -0.013934) # 주차공간 2번
+obstacle_coordinates_3= (-3.636491, 2.037476, 0.00, 0.00, 0.00, -0.013934) # 주차공간 3번
+obstacle_coordinates_4= (-3.636491, -1.428019, 0.00, 0.00, 0.00, -0.013934) # 주차공간 4번
+ 
 obstacle_coordinates2 = [(11.884767, 11.605120), (12.040719, 10.060495), (12.230394, 8.181866)]
 obstacle_coordinates3 = [(16.106836, -0.111269), (16.281788, -1.844067), (16.366463, -3.446680)]
 

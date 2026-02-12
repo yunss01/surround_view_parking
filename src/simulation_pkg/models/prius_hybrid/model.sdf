@@ -655,8 +655,8 @@
         <surface>
           <friction>
             <ode>
-              <mu>0.9</mu>
-              <mu2>0.9</mu2>
+              <mu>1.0</mu>
+              <mu2>1.0</mu2>
               <fdir1>0 0 0</fdir1>
               <slip1>0</slip1>
               <slip2>0</slip2>
@@ -763,8 +763,8 @@
         <surface>
           <friction>
             <ode>
-              <mu>0.9</mu>
-              <mu2>0.9</mu2>
+              <mu>1.0</mu>
+              <mu2>1.0</mu2>
               <fdir1>0 0 0</fdir1>
               <slip1>0</slip1>
               <slip2>0</slip2>
@@ -1165,8 +1165,8 @@
         <dynamics>
           <spring_reference>0</spring_reference>
           <spring_stiffness>0</spring_stiffness>
-          <damping>0</damping> <!-- 0.7 후진 시 더 높은 댐핑 -->
-          <friction>0</friction> <!-- 15.0 후진 시 더 높은 마찰 -->
+          <damping>3.0</damping> <!-- 0.7 후진 시 더 높은 댐핑 -->
+          <friction>1.0</friction> <!-- 15.0 후진 시 더 높은 마찰 -->
         </dynamics>
       </axis>
       <axis2>
@@ -1215,8 +1215,8 @@
         <dynamics>
           <spring_reference>0</spring_reference>
           <spring_stiffness>0</spring_stiffness>
-          <damping>0</damping>
-          <friction>0</friction>
+          <damping>3.0</damping>
+          <friction>1.0</friction>
         </dynamics>
       </axis>
       <axis2>

@@ -21,9 +21,9 @@ def generate_launch_description():
             cmd=['gazebo', '--verbose', world_file, '-s', 'libgazebo_ros_factory.so'], 
             output='screen'),
         
-        # ExecuteProcess(
-        #     cmd=['rqt'], 
-        #     output='screen'),
+        ExecuteProcess(
+            cmd=['rqt'], 
+            output='screen'),
         
         # Node(
         #     package='simulation_pkg', 
@@ -49,11 +49,11 @@ def generate_launch_description():
         #     output='screen',
         # ),
         
-        # Node(
-        #     package='simulation_pkg',
-        #     executable='load_obstable_car_node',
-        #     output='screen',
-        # ),
+        Node(
+            package='simulation_pkg',
+            executable='load_obstable_car_node',
+            output='screen',
+        ),
 
         # Node(
         #     package='simulation_pkg',
