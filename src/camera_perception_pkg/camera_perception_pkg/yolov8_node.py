@@ -53,15 +53,14 @@ class Yolov8Node(LifecycleNode):
         
         #---------------Variable Setting---------------
         # 딥러닝 모델 pt 파일명 작성
-        #self.declare_parameter("model", "yolov8m.pt")
-        self.declare_parameter("model", "/home/sukja/surround_view_parking_simulation/best_pose.pt")
+        self.declare_parameter("model", "/home/sukja/surround_view_parking_simulation/best_pose_rev03.pt")
         
         # 추론 하드웨어 선택 (cpu / gpu) 
         #self.declare_parameter("device", "cpu")
         self.declare_parameter("device", "cuda:0")
         #----------------------------------------------
         
-        self.declare_parameter("threshold", 0.7)
+        self.declare_parameter("threshold", 0.5)
         self.declare_parameter("enable", True)
         self.declare_parameter("image_reliability",
                                QoSReliabilityPolicy.RELIABLE)
@@ -261,7 +260,8 @@ class Yolov8Node(LifecycleNode):
                 stream=False,
                 conf=self.threshold,
                 device=self.device,
-                imgsz=1280
+                imgsz=1280,
+                iou=0.4 # 겹치는 유령 Bbox를 합쳐서 하나로 만드는 마법의 NMS 옵션!
             )
             results: Results = results[0].cpu()
 

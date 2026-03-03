@@ -655,8 +655,8 @@
         <surface>
           <friction>
             <ode>
-              <mu>1.0</mu>
-              <mu2>1.0</mu2>
+              <mu>2.0</mu>
+              <mu2>2.0</mu2>
               <fdir1>0 0 0</fdir1>
               <slip1>0</slip1>
               <slip2>0</slip2>
@@ -763,8 +763,8 @@
         <surface>
           <friction>
             <ode>
-              <mu>1.0</mu>
-              <mu2>1.0</mu2>
+              <mu>2.0</mu>
+              <mu2>2.0</mu2>
               <fdir1>0 0 0</fdir1>
               <slip1>0</slip1>
               <slip2>0</slip2>
@@ -870,8 +870,8 @@
         <surface>
           <friction>
             <ode>
-              <mu>1.1</mu>
-              <mu2>1.1</mu2>
+              <mu>2.0</mu>
+              <mu2>2.0</mu2>
               <fdir1>0 0 0</fdir1>
               <slip1>0</slip1>
               <slip2>0</slip2>
@@ -966,8 +966,8 @@
         <surface>
           <friction>
             <ode>
-              <mu>1.1</mu>
-              <mu2>1.1</mu2>
+              <mu>2.0</mu>
+              <mu2>2.0</mu2>
               <fdir1>0 0 0</fdir1>
               <slip1>0</slip1>
               <slip2>0</slip2>
@@ -1539,7 +1539,7 @@
       <pose>-0.000331 4.5 7.5 6e-06 1.57 1.57112</pose>
       <sensor name='rear_camera' type='camera'>
         <always_on>1</always_on>
-        <visualize>1</visualize>
+        <visualize>0</visualize>
         <update_rate>30</update_rate>
         <camera name='rear_prius_cam'>
           <horizontal_fov>1.74</horizontal_fov>
@@ -1610,7 +1610,7 @@
       <pose> -4.2 0.318688 7.5 6e-06 1.57 0</pose>
       <sensor name='right_camera' type='camera'>
         <always_on>1</always_on>
-        <visualize>1</visualize>
+        <visualize>0</visualize>
         <update_rate>30</update_rate>
         <camera name='right_prius_cam'>
           <horizontal_fov>1.74</horizontal_fov>
@@ -1681,7 +1681,7 @@
       <pose>4.2 0.318688 7.5 6e-06 1.57 0</pose>
       <sensor name='left_camera' type='camera'>
         <always_on>1</always_on>
-        <visualize>1</visualize>
+        <visualize>0</visualize>
         <update_rate>30</update_rate>
         <camera name='left_prius_cam'>
           <horizontal_fov>1.74</horizontal_fov>
@@ -1752,7 +1752,7 @@
       <pose>-0.000331 -4.5 7.5 6e-06 1.57 1.57112</pose>
       <sensor name='fo_camera' type='camera'>
         <always_on>1</always_on>
-        <visualize>1</visualize>
+        <visualize>0</visualize>
         <update_rate>30</update_rate>
         <camera name='fo_prius_cam'>
           <horizontal_fov>1.74</horizontal_fov>
@@ -1825,8 +1825,8 @@
 
       <steering_wheel_joint>steering_joint</steering_wheel_joint> 
       
-      <front_left_joint>front_left_combined_joint</front_left_joint> 
-      <front_right_joint>front_right_combined_joint</front_right_joint> 
+      <front_left_joint>front_left_combined_joint</front_left_joint>
+      <front_right_joint>front_right_combined_joint</front_right_joint>
 
       <rear_left_joint>rear_left_wheel_joint</rear_left_joint> 
       <rear_right_joint>rear_right_wheel_joint</rear_right_joint> 

@@ -1,0 +1,16 @@
+train: /home/sukja/surround_view_parking_simulation/DL model/surround view parking.v9i.yolov8/train/images
+val: /home/sukja/surround_view_parking_simulation/DL model/surround view parking.v9i.yolov8/valid/images
+test: /home/sukja/surround_view_parking_simulation/DL model/surround view parking.v9i.yolov8/test/images
+
+kpt_shape: [4, 3]
+flip_idx: [0, 1, 2, 3]
+
+nc: 1
+names: ['parking_spot']
+
+roboflow:
+  workspace: visionsw-starterpack
+  project: surround-view-parking
+  version: 9
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/visionsw-starterpack/surround-view-parking/dataset/9

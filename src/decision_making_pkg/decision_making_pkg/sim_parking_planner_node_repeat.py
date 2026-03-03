@@ -28,7 +28,7 @@ target_env = os.getenv('TARGET_SPOT_ID')
 if target_env is not None:
     TARGET_SPOT_ID = int(target_env)
 else:
-    TARGET_SPOT_ID = 3
+    TARGET_SPOT_ID = 2
 #----------------------------------------------
 
 class ParkingState(Enum):
@@ -57,10 +57,10 @@ class ParkingPlannerNodeRepeat(Node):
         self.max_steering = 7.0
 
         # 최신 튜닝 값 적용
-        self.approach_duration_map = {1: 9.3, 2: 13.4, 3: 17.4, 4: 21.5}
+        self.approach_duration_map = {1: 9.5, 2: 13.7, 3: 17.7, 4: 21.7}
         self.approach_speed = 50.0
         self.unpark_duration_map = {1: 18.0, 2: 14.5, 3: 10.0, 4: 6.0}
-        self.arc2_finish_threshold_map = {1: 2.5, 2: 2.1, 3: 1.8, 4: 1.8}
+        self.arc2_finish_threshold_map = {1: 3.5, 2: 2.8, 3: 2.0, 4: 1.8}
 
         self.state = ParkingState.READY
         self.target_spot_id = TARGET_SPOT_ID 
@@ -89,13 +89,17 @@ class ParkingPlannerNodeRepeat(Node):
         
         self.current_odom = {'x':0.0, 'y':0.0, 'yaw':0.0} 
         self.IDEAL_POSES = {
-            1: {'x': -3.263, 'y': 8.659, 'yaw': 90.0},
-            2: {'x': -3.263,  'y': 5.302, 'yaw': 90.0},
-            3: {'x': -3.263,  'y': 1.883, 'yaw': 90.0},
-            4: {'x': -3.263,  'y': -1.452, 'yaw': 90.0}
+            1: {'x': -3.203, 'y': 8.659, 'yaw': 90.0},
+            2: {'x': -3.203,  'y': 5.252, 'yaw': 90.0},
+            3: {'x': -3.203,  'y': 1.883, 'yaw': 90.0},
+            4: {'x': -3.203,  'y': -1.452, 'yaw': 90.0}
         }
 
         self.start_arc1_angle = None
+        self.adjacent_obstacle_flag = False
+
+        self.texture_std_history = []  # 최근 표준편차 값들을 저장할 리스트
+        self.TEXTURE_WINDOW_SIZE = 5   # 필터 창 크기 (3~5프레임 권장)
         
         # [Auto Start] 2초 뒤 자동 시작
         self.create_timer(6.0, self.auto_start)
@@ -141,19 +145,36 @@ class ParkingPlannerNodeRepeat(Node):
     def calculate_entrance_angle(self, obj):
         dx = obj.p2_bev.x - obj.p1_bev.x
         dy = obj.p2_bev.y - obj.p1_bev.y
-        return math.degrees(math.atan2(dy, dx))
+        raw_angle = math.degrees(math.atan2(dy, dx))
+        
+        # [NEW] 지터링(Jitter) 노이즈 억제 및 궤적 보정용 EMA 필터
+        if not hasattr(self, 'smoothed_angle') or getattr(self, 'last_spot_id', None) != self.target_spot_id:
+            self.smoothed_angle = raw_angle
+            self.last_spot_id = self.target_spot_id
+        else:
+            # alpha 값 (0.1 ~ 0.3): 작을수록 노이즈에 둔감해지고 반응이 느려짐
+            alpha = 0.15  
+            diff = raw_angle - self.smoothed_angle
+            
+            # 각도가 180도를 넘어가는 상황(Wrap-around) 부드럽게 처리
+            while diff > 180.0: diff -= 360.0
+            while diff < -180.0: diff += 360.0
+            
+            self.smoothed_angle += alpha * diff
+            
+        return self.smoothed_angle
 
-    # [최신 로직] 사이드 픽셀 검사 (ROI 450~600, Thresh 25.0)
+    # [최신 로직] 사이드 픽셀 검사
     def check_side_occupancy(self):
         if self.latest_bev_image is None: 
+            self.get_logger().warn("⚠️ No Image for Side Check!")
             return True 
         
         h, w, _ = self.latest_bev_image.shape
-        
-        # 앞쪽으로 당겨진 ROI 좌표
         roi_x1, roi_x2 = 700, 850
-        roi_y1, roi_y2 = 450, 600
+        roi_y1, roi_y2 = 550, 650
         
+        # ROI 범위 제한
         roi_x1 = max(0, min(roi_x1, w))
         roi_x2 = max(0, min(roi_x2, w))
         roi_y1 = max(0, min(roi_y1, h))
@@ -162,12 +183,57 @@ class ParkingPlannerNodeRepeat(Node):
         side_roi = self.latest_bev_image[roi_y1:roi_y2, roi_x1:roi_x2]
         if side_roi.size == 0: return False
 
+        # 텍스처 분석 (표준편차 계산)
         gray = cv2.cvtColor(side_roi, cv2.COLOR_BGR2GRAY)
-        mean, stddev = cv2.meanStdDev(gray)
+        _, stddev = cv2.meanStdDev(gray)
         std_val = stddev[0][0]
+
+        # --- [수정 구간: 이동 평균 필터 적용] ---
+        # 1. 새로운 값을 히스토리에 추가
+        self.texture_std_history.append(std_val)
         
-        self.get_logger().info(f"🧐 Side StdDev: {std_val:.2f}")
-        return std_val > 35.0
+        # 2. 윈도우 크기 유지 (오래된 값 삭제)
+        if len(self.texture_std_history) > self.TEXTURE_WINDOW_SIZE:
+            self.texture_std_history.pop(0)
+        
+        # 3. 히스토리의 평균값 계산
+        avg_std = sum(self.texture_std_history) / len(self.texture_std_history)
+        
+        self.get_logger().info(f"🧐 Side Check (Filtered) Avg StdDev: {avg_std:.2f} (Current: {std_val:.2f})")
+        
+        # 4. 필터링된 평균값이 임계값을 넘을 때만 장애물로 판단
+        # (데이터가 충분히 쌓이지 않았을 때는 안전을 위해 False를 반환하거나 평균값으로 판단)
+        return avg_std > 20.0
+
+    def check_adjacent_obstacles(self):
+        if self.latest_bev_image is None: 
+            return False
+        
+        h, w, _ = self.latest_bev_image.shape
+        # 타겟 주차칸의 x 좌표 (기존 check_side_occupancy와 동일하게 사용)
+        roi_x1, roi_x2 = 700, 850
+        
+        # 인접 주차칸의 y 좌표 (위아래로 약 150 픽셀씩 띄워서 인접 칸 ROI 설정)
+        left_y1, left_y2 = max(0, 850), max(0, 950)   # 1번 칸 방향
+        right_y1, right_y2 = min(h, 350), min(h, 450) # 3번 칸 방향
+        
+        left_roi = self.latest_bev_image[left_y1:left_y2, roi_x1:roi_x2]
+        right_roi = self.latest_bev_image[right_y1:right_y2, roi_x1:roi_x2]
+        
+        left_std, right_std = 0.0, 0.0
+        
+        if left_roi.size > 0:
+            _, stddev_l = cv2.meanStdDev(cv2.cvtColor(left_roi, cv2.COLOR_BGR2GRAY))
+            left_std = stddev_l[0][0]
+            
+        if right_roi.size > 0:
+            _, stddev_r = cv2.meanStdDev(cv2.cvtColor(right_roi, cv2.COLOR_BGR2GRAY))
+            right_std = stddev_r[0][0]
+            
+        self.get_logger().info(f"👀 Adjacent Check - Left: {left_std:.2f}, Right: {right_std:.2f}")
+        
+        # 임계값(20.0)을 하나라도 넘으면 장애물이 있는 것으로 간주 (True 반환)
+        return (left_std > 20.0) or (right_std > 20.0)
 
     def control_loop(self):
 
@@ -202,6 +268,11 @@ class ParkingPlannerNodeRepeat(Node):
             self.get_logger().warn(f"🚫 Side Occupied! (StdDev High). Auto-skipping...")
             self.state = ParkingState.PARKING_FAILED
             return
+
+        # [NEW] 인접 주차칸(1, 3번) 장애물 점유 여부 확인 및 플래그 저장
+        self.adjacent_obstacle_flag = self.check_adjacent_obstacles()
+        if self.adjacent_obstacle_flag:
+            self.get_logger().warn("⚠️ Adjacent obstacle detected! Compensation offset will be applied in Arc 2.")
 
         # [2단계] 비어 있다면 주차선 찾기
         target_obj = None
@@ -247,6 +318,13 @@ class ParkingPlannerNodeRepeat(Node):
             self.publish_control(0.0, -30.0, alpha=1.0) 
             return
         current_angle = self.calculate_entrance_angle(target_obj)
+
+        # [NEW] SEARCHING 단계에서 저장해둔 플래그를 활용한 각도 보상
+        if getattr(self, 'adjacent_obstacle_flag', False):
+            # 회원님의 제안대로 찌그러진 가짜 각도에서 2.4도 정도를 빼줌
+            # (만약 테스트 시 차가 반대로 틀어지면 += 2.4 으로 부호만 바꿔주세요)
+            current_angle -= 2.4
+
         target_threshold = self.arc2_finish_threshold_map.get(self.target_spot_id, 3.0)
         if abs(current_angle) < target_threshold: self.alignment_count += 1
         else: self.alignment_count = 0
@@ -258,7 +336,7 @@ class ParkingPlannerNodeRepeat(Node):
             self.state = ParkingState.ALIGNMENT
             self.has_corrected_initial_angle = False 
             return
-        self.publish_control(-self.max_steering, -30.0, alpha=0.3)
+        self.publish_control(-self.max_steering, -50.0, alpha=0.3)
 
     def run_alignment(self):
         target_obj = self.get_tracked_target()
@@ -266,26 +344,17 @@ class ParkingPlannerNodeRepeat(Node):
              self.publish_control(0.0, -30.0, alpha=1.0)
              return
         dist_y = abs(target_obj.center_bev.y - self.BEV_CENTER_Y)
-        if dist_y < 70: 
+        if dist_y < 85: 
             self.state = ParkingState.FINISHED
             self.publish_control(0.0, 0.0)
             self.get_logger().info(f"Success! Parking Finished (DistY: {dist_y:.1f}).")
             return
-        if not self.has_corrected_initial_angle:
-            current_angle = self.calculate_entrance_angle(target_obj)
-            if abs(current_angle) > 1.0:
-                correction = -current_angle * 0.5 
-                correction = max(min(correction, 3.0), -3.0) 
-                self.publish_control(correction, -30.0, alpha=1.0)
-                return 
-            else:
-                self.has_corrected_initial_angle = True
-        self.publish_control(0.0, -30.0, alpha=1.0)
+        self.publish_control(0.0, -25.0, alpha=1.0)
 
     def run_finished(self):
         # 주차 완료 -> 데이터 저장 -> 2초 대기 -> 출차 시작
         self.publish_control(0.0, 0.0)
-        time.sleep(1.0)
+        time.sleep(3.0)
         if not getattr(self, 'evaluation_saved', False):
             self.save_evaluation_data()
             self.evaluation_saved = True
@@ -384,7 +453,7 @@ class ParkingPlannerNodeRepeat(Node):
         yaw_diff = abs(self.current_odom['yaw'] - ideal['yaw'])
         if yaw_diff > 180: yaw_diff = 360 - yaw_diff
         
-        filename = f"parking_evaluation_spot_{self.target_spot_id}_obstacle2&4.csv"
+        filename = f"parking_evaluation_obstacle1_spot_{self.target_spot_id}.csv"
         file_exists = os.path.isfile(filename)
         with open(filename, mode='a', newline='') as file:
             writer = csv.writer(file)
